@@ -1,0 +1,13 @@
+.env
+*.json
+*-key.json
+__pycache__/
+*.py[cod]
+.Python
+venv/
+ENV/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+*.log

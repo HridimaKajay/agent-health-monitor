@@ -1,0 +1,19 @@
+# Google Cloud
+google-cloud-bigquery==3.12.0
+google-cloud-firestore==2.12.1
+google-cloud-pubsub==2.18.4
+google-genai==0.3.0
+
+# Data Processing
+scipy==1.11.2
+numpy==1.24.3
+pandas==2.0.3
+
+# Web Framework
+Flask==2.3.3
+Werkzeug==2.3.7
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
+
