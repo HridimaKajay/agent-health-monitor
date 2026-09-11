@@ -5,7 +5,6 @@ Production-grade observability system for multi-agent AI platforms
 """
 
 from flask import Flask, jsonify, request
-from google.cloud import firestore
 from datetime import datetime
 import os
 import sys
@@ -15,7 +14,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from customer_service_agent import CustomerServiceAgent
 
 app = Flask(__name__)
-fs_client = firestore.Client()
 project_id = os.environ.get("GCP_PROJECT", "agent-health-monitor")
 
 # Initialize agent
@@ -151,7 +149,6 @@ def get_agent_metrics(agent_id):
     Returns: health_score, quality, hallucination_rate, cost, etc.
     """
     
-    # For now, return sample data (would connect to BigQuery in production)
     return jsonify({
         "status": "success",
         "agent_id": agent_id,
@@ -196,28 +193,16 @@ def monitoring():
         .metric-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
         .metric-value { font-size: 36px; font-weight: 700; color: #4285F4; margin-bottom: 8px; }
         .metric-label { color: #5f6368; font-size: 14px; font-weight: 500; }
-        .status-badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-        .status-healthy { background: #e6f4ea; color: #137333; }
-        .status-degraded { background: #fef7e0; color: #9d7a00; }
-        .status-critical { background: #fce8e6; color: #9c3900; }
         .section { background: white; padding: 30px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
         .section h2 { font-size: 20px; font-weight: 600; color: #202124; margin-bottom: 20px; }
         .section ul { margin-left: 20px; line-height: 1.8; }
         .section li { margin-bottom: 10px; color: #5f6368; }
         .section strong { color: #202124; }
-        .chart { background: #f8f9fa; border: 1px solid #dadce0; border-radius: 8px; padding: 20px; margin: 15px 0; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.6; color: #3c4043; }
-        .alert-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        .alert-table th { background: #f8f9fa; padding: 12px; text-align: left; font-weight: 600; color: #202124; border-bottom: 2px solid #dadce0; }
-        .alert-table td { padding: 12px; border-bottom: 1px solid #dadce0; color: #5f6368; }
-        .alert-table tr:hover { background: #f8f9fa; }
-        .alert-warning { color: #f57c00; font-weight: 600; }
-        .alert-critical { color: #d32f2f; font-weight: 600; }
         .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 15px; }
         .feature-item { background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #4285F4; }
         .feature-item strong { color: #4285F4; }
-        .btn { display: inline-block; padding: 12px 24px; background: #4285F4; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: background 0.2s; margin-top: 20px; border: none; cursor: pointer; }
+        .btn { display: inline-block; padding: 12px 24px; background: #4285F4; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: background 0.2s; margin-top: 20px; }
         .btn:hover { background: #1a73e8; }
-        .code-block { background: #f8f9fa; border: 1px solid #dadce0; border-radius: 8px; padding: 15px; font-family: 'Courier New', monospace; font-size: 12px; color: #3c4043; overflow-x: auto; margin: 15px 0; }
     </style>
 </head>
 <body>
@@ -229,37 +214,35 @@ def monitoring():
         
         <div class="metrics-grid">
             <div class="metric-card">
-                <div class="metric-value" id="health-score">82.5</div>
+                <div class="metric-value">82.5</div>
                 <div class="metric-label">Health Score (0-100)</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value" id="quality-score">9.2</div>
+                <div class="metric-value">9.2</div>
                 <div class="metric-label">Avg Quality (0-10)</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value" id="hallucination-rate">15.0%</div>
+                <div class="metric-value">15.0%</div>
                 <div class="metric-label">Hallucination Rate</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value" id="total-cost">$0.0067</div>
+                <div class="metric-value">$0.0067</div>
                 <div class="metric-label">Total Cost (USD)</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value" id="success-rate">85.0%</div>
+                <div class="metric-value">85.0%</div>
                 <div class="metric-label">Success Rate</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value" id="avg-latency">2345ms</div>
+                <div class="metric-value">2345ms</div>
                 <div class="metric-label">Avg Latency</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value" id="total-traces">10</div>
+                <div class="metric-value">10</div>
                 <div class="metric-label">Total Traces</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value" id="agent-status">
-                    <span class="status-badge status-healthy">Healthy</span>
-                </div>
+                <div class="metric-value" style="color: #28a745;">Healthy</div>
                 <div class="metric-label">Agent Status</div>
             </div>
         </div>
@@ -272,73 +255,11 @@ def monitoring():
                 <li><strong>Hallucination Detection:</strong> Identifying when agents generate false or misleading information</li>
                 <li><strong>Anomaly Detection:</strong> Statistical analysis + Gemini-powered behavioral anomaly detection</li>
                 <li><strong>Cost Optimization:</strong> Tracking token usage and API costs per interaction</li>
-                <li><strong>Health Scoring:</strong> Composite metric: (Quality × 0.4) + (Reliability × 0.3) + (Cost Efficiency × 0.2) + (Speed × 0.1) - Hallucination Penalty</li>
             </ul>
         </div>
         
         <div class="section">
-            <h2>🔍 Agent Trace Evaluation Pipeline</h2>
-            <p>Every agent interaction goes through this real-time evaluation flow:</p>
-            <div class="chart">
-1. Customer Question Received
-    ↓
-2. FAQ Database Lookup (Context Retrieval)
-    ↓
-3. Gemini Response Generation (LLM Processing)
-    ↓
-4. Quality Assessment Scoring (0-10)
-    ↓
-5. Hallucination Detection Analysis
-    ↓
-6. Anomaly Pattern Detection
-    ↓
-7. Health Score Calculation
-    ↓
-8. Alert Generation (if thresholds exceeded)
-    ↓
-9. BigQuery Trace Logging
-    ↓
-10. Firestore State Update
-            </div>
-        </div>
-        
-        <div class="section">
-            <h2>⚠️ Active Alerts & Incidents</h2>
-            <p>Real-time monitoring alerts when metrics deviate from baseline:</p>
-            <table class="alert-table">
-                <tr>
-                    <th>Agent ID</th>
-                    <th>Alert Type</th>
-                    <th>Severity</th>
-                    <th>Message</th>
-                    <th>Detected</th>
-                </tr>
-                <tr>
-                    <td>cs-agent-v1</td>
-                    <td>Quality Degradation</td>
-                    <td><span class="alert-warning">⚠️ WARNING</span></td>
-                    <td>Quality score dropped from 9.2 to 7.5</td>
-                    <td>2 mins ago</td>
-                </tr>
-                <tr>
-                    <td>cs-agent-v1</td>
-                    <td>Hallucination Spike</td>
-                    <td><span class="alert-warning">⚠️ WARNING</span></td>
-                    <td>Hallucination rate elevated to 15% (threshold: 10%)</td>
-                    <td>5 mins ago</td>
-                </tr>
-                <tr>
-                    <td>cs-agent-v1</td>
-                    <td>Cost Overrun</td>
-                    <td><span class="alert-warning">⚠️ WARNING</span></td>
-                    <td>Token usage 30% above baseline</td>
-                    <td>8 mins ago</td>
-                </tr>
-            </table>
-        </div>
-        
-        <div class="section">
-            <h2>📈 Key Monitoring Features</h2>
+            <h2>📈 Key Features</h2>
             <div class="feature-grid">
                 <div class="feature-item">
                     <strong>✅ Real-Time Monitoring</strong>
@@ -361,22 +282,6 @@ def monitoring():
                     <p>Monitors token usage and API costs per interaction</p>
                 </div>
                 <div class="feature-item">
-                    <strong>✅ Health Calculation</strong>
-                    <p>Composite metric balancing quality, reliability, cost, speed</p>
-                </div>
-                <div class="feature-item">
-                    <strong>✅ Alert System</strong>
-                    <p>Automatic alerts when thresholds are exceeded</p>
-                </div>
-                <div class="feature-item">
-                    <strong>✅ BigQuery Integration</strong>
-                    <p>Historical trace analysis with 5000+ sample traces</p>
-                </div>
-                <div class="feature-item">
-                    <strong>✅ Firestore Storage</strong>
-                    <p>Real-time agent state and configuration management</p>
-                </div>
-                <div class="feature-item">
                     <strong>✅ Production Ready</strong>
                     <p>Scalable architecture for multi-agent systems</p>
                 </div>
@@ -385,63 +290,15 @@ def monitoring():
         
         <div class="section">
             <h2>🤖 Live Agent Testing</h2>
-            <p>See the evaluation engine in action with the live customer service agent:</p>
-            <a href="/demo" class="btn">→ Test Live Agent & See Real-Time Evaluation</a>
-            <p style="margin-top: 15px; color: #5f6368; font-size: 14px;">
-                The agent answers questions about CloudPulse (AI Email Platform).<br>
-                Every response is evaluated for quality, hallucinations, and anomalies in real-time.
-            </p>
-        </div>
-        
-        <div class="section">
-            <h2>🔧 Technical Stack</h2>
-            <ul>
-                <li><strong>LLM:</strong> Google Gemini 2.0 Flash (Response Generation + Quality Assessment)</li>
-                <li><strong>Agent Framework:</strong> Google Agent Development Kit (ADK)</li>
-                <li><strong>Storage:</strong> Google BigQuery (Traces) + Firestore (Real-time State)</li>
-                <li><strong>Deployment:</strong> Cloud Run (Serverless) / Render (Free Tier)</li>
-                <li><strong>Evaluation Engine:</strong> Custom Python with statistical anomaly detection</li>
-                <li><strong>API:</strong> Flask (REST API) + Google Cloud Pub/Sub (Streaming)</li>
-            </ul>
-        </div>
-        
-        <div class="section">
-            <h2>📊 Sample Monitoring Data</h2>
-            <p>This is a live monitoring dashboard. Metrics update as new traces are processed:</p>
-            <div class="code-block">
-{
-  "agent_id": "cs-agent-v1",
-  "health_score": 82.5,
-  "health_status": "healthy",
-  "avg_quality_score": 9.2,
-  "success_rate": 0.85,
-  "hallucination_rate": 15.0,
-  "avg_latency_ms": 2345.23,
-  "total_cost_usd": 0.0067,
-  "total_traces": 10,
-  "anomaly_detected": false,
-  "alert_count": 3
-}
-            </div>
+            <p>See the evaluation engine in action:</p>
+            <a href="/demo" class="btn">Test Live Agent & See Real-Time Evaluation</a>
         </div>
     </div>
     
     <script>
-        // Load metrics from /metrics endpoint
         fetch('/metrics/agent/cs-agent-v1')
             .then(r => r.json())
-            .then(data => {
-                if(data.status === 'success') {
-                    document.getElementById('health-score').textContent = data.health_score.toFixed(1);
-                    document.getElementById('quality-score').textContent = data.avg_quality_score.toFixed(1);
-                    document.getElementById('hallucination-rate').textContent = data.hallucination_rate.toFixed(1) + '%';
-                    document.getElementById('total-cost').textContent = '$' + data.total_cost.toFixed(4);
-                    document.getElementById('success-rate').textContent = (data.success_rate * 100).toFixed(1) + '%';
-                    document.getElementById('avg-latency').textContent = data.avg_latency.toFixed(0) + 'ms';
-                    document.getElementById('total-traces').textContent = data.total_traces;
-                }
-            })
-            .catch(e => console.log('Metrics endpoint not available'));
+            .catch(e => console.log('Metrics not available'));
     </script>
 </body>
 </html>"""
@@ -449,15 +306,12 @@ def monitoring():
     return html, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 # ============================================================================
-# DEMO ENDPOINT (For Google Team)
+# DEMO ENDPOINT
 # ============================================================================
 
 @app.route('/demo', methods=['GET'])
 def demo():
-    """
-    Interactive demo page for testing
-    Returns HTML form to test the agent
-    """
+    """Interactive demo page for testing"""
     
     html = """<!DOCTYPE html>
 <html>
@@ -471,23 +325,12 @@ def demo():
         .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); max-width: 700px; width: 100%; }
         .header { text-align: center; margin-bottom: 30px; }
         .header h1 { font-size: 28px; color: #202124; margin-bottom: 10px; }
-        .header p { color: #5f6368; font-size: 16px; }
-        textarea, input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #dadce0; border-radius: 8px; font-size: 14px; font-family: inherit; }
-        textarea:focus, input:focus { outline: none; border-color: #4285F4; box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1); }
-        button { width: 100%; padding: 12px; background: #4285F4; color: white; cursor: pointer; border: none; font-weight: 600; border-radius: 8px; font-size: 16px; transition: background 0.2s; }
+        textarea, button { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #dadce0; border-radius: 8px; font-size: 14px; }
+        button { background: #4285F4; color: white; cursor: pointer; border: none; font-weight: 600; }
         button:hover { background: #1a73e8; }
-        button:active { transform: scale(0.98); }
-        .loading { display: none; text-align: center; color: #4285F4; margin: 20px 0; }
         .response { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 20px; display: none; }
-        .response h3 { color: #202124; margin-bottom: 15px; }
-        .response-text { color: #3c4043; line-height: 1.6; margin-bottom: 20px; padding: 15px; background: white; border-left: 4px solid #4285F4; border-radius: 4px; }
         .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 15px; }
         .metric { background: white; padding: 12px; border-radius: 6px; text-align: center; border: 1px solid #dadce0; }
-        .metric-label { font-size: 12px; color: #5f6368; margin-bottom: 5px; }
-        .metric-value { font-size: 18px; font-weight: 600; color: #4285F4; }
-        .badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
-        .badge-good { background: #e6f4ea; color: #137333; }
-        .badge-warning { background: #fef7e0; color: #9d7a00; }
     </style>
 </head>
 <body>
@@ -497,15 +340,12 @@ def demo():
             <p>Powered by Gemini | Monitored by Agent Health Monitor</p>
         </div>
         
-        <textarea id="question" placeholder="Ask anything about CloudPulse email platform..." rows="3"></textarea>
+        <textarea id="question" placeholder="Ask anything about CloudPulse..." rows="3"></textarea>
         <button onclick="askAgent()">Ask Agent</button>
-        
-        <div class="loading" id="loading">⏳ Processing your question...</div>
         
         <div id="response" class="response">
             <h3>📧 Agent Response:</h3>
-            <div class="response-text" id="agent-response"></div>
-            
+            <p id="agent-response"></p>
             <h3>📊 Quality Metrics:</h3>
             <div class="metrics" id="metrics"></div>
         </div>
@@ -514,13 +354,7 @@ def demo():
     <script>
         async function askAgent() {
             const question = document.getElementById('question').value;
-            if (!question) {
-                alert('Please enter a question');
-                return;
-            }
-            
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('response').style.display = 'none';
+            if (!question) { alert('Please enter a question'); return; }
             
             try {
                 const response = await fetch('/agent/query', {
@@ -530,52 +364,18 @@ def demo():
                 });
                 
                 const data = await response.json();
-                document.getElementById('loading').style.display = 'none';
-                
                 if (data.status === 'success') {
                     document.getElementById('agent-response').textContent = data.response;
-                    
-                    const metricsHtml = `
-                        <div class="metric">
-                            <div class="metric-label">Quality Score</div>
-                            <div class="metric-value"><span class="badge ${data.quality_score >= 8 ? 'badge-good' : 'badge-warning'}">⭐ ${data.quality_score}/10</span></div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Hallucination</div>
-                            <div class="metric-value"><span class="badge ${!data.hallucination_detected ? 'badge-good' : 'badge-warning'}">🎯 ${data.hallucination_detected ? 'Detected' : 'None'}</span></div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Latency</div>
-                            <div class="metric-value">⏱️ ${data.latency_ms.toFixed(0)}ms</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Cost</div>
-                            <div class="metric-value">💰 $${data.cost_usd.toFixed(6)}</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">FAQ Match</div>
-                            <div class="metric-value"><span class="badge ${data.faq_matched ? 'badge-good' : 'badge-warning'}">📚 ${data.faq_matched ? 'Found' : 'None'}</span></div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Trace ID</div>
-                            <div class="metric-value" style="font-size: 11px; overflow: hidden; text-overflow: ellipsis;">${data.trace_id.substring(0, 12)}...</div>
-                        </div>
+                    document.getElementById('metrics').innerHTML = `
+                        <div class="metric">⭐ Quality: ${data.quality_score}/10</div>
+                        <div class="metric">🎯 Hallucination: ${data.hallucination_detected ? 'Yes' : 'No'}</div>
+                        <div class="metric">⏱️ ${data.latency_ms.toFixed(0)}ms</div>
+                        <div class="metric">💰 $${data.cost_usd.toFixed(6)}</div>
                     `;
-                    document.getElementById('metrics').innerHTML = metricsHtml;
                     document.getElementById('response').style.display = 'block';
-                } else {
-                    alert('Error: ' + data.error);
                 }
-            } catch (error) {
-                document.getElementById('loading').style.display = 'none';
-                alert('Request failed: ' + error);
-            }
+            } catch (e) { alert('Error: ' + e); }
         }
-        
-        // Allow Enter key to submit
-        document.getElementById('question').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && e.ctrlKey) askAgent();
-        });
     </script>
 </body>
 </html>"""
@@ -583,7 +383,7 @@ def demo():
     return html, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 # ============================================================================
-# SAMPLE ENDPOINTS (for testing)
+# SAMPLE ENDPOINTS
 # ============================================================================
 
 @app.route('/sample-questions', methods=['GET'])
@@ -596,17 +396,11 @@ def sample_questions():
         "Can I integrate CloudPulse with Salesforce?",
         "Is CloudPulse GDPR compliant?",
         "How do I schedule emails?",
-        "Does CloudPulse track email opens?",
-        "Can I use CloudPulse for newsletters?",
-        "How do I contact support?",
-        "Do you offer annual billing discounts?",
-        "What payment methods do you accept?"
     ]
     
     return jsonify({
         "questions": samples,
-        "count": len(samples),
-        "usage": "POST /agent/batch-test with {\"questions\": [...]}"
+        "count": len(samples)
     }), 200
 
 # ============================================================================
@@ -616,21 +410,8 @@ def sample_questions():
 @app.route('/', methods=['GET'])
 def root():
     """Root endpoint - redirects to monitoring dashboard"""
-    return """
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>AI Agent Health Monitor</title>
-    </head>
-    <body>
-        <h1>Welcome to AI Agent Health Monitor</h1>
-        <p>Redirecting to dashboard...</p>
-        <script>
-            window.location.href = '/monitoring';
-        </script>
-    </body>
-    </html>
-    """, 200, {'Content-Type': 'text/html; charset=utf-8'}
+    return """<html><head><meta charset="UTF-8"><title>AI Agent Health Monitor</title></head>
+    <body><h1>Redirecting...</h1><script>window.location.href = '/monitoring';</script></body></html>""", 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
