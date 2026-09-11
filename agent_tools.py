@@ -1,18 +1,76 @@
-# agent_tools.py
+# -*- coding: utf-8 -*-
 """
 Tools available to the Customer Service Agent
 These are the actions the agent can take to help customers
 """
 
 import json
-from io import BytesIO
 from datetime import datetime
-from google.cloud import bigquery
+from google.cloud import bigquery, firestore
+from google import genai
+import os
 from sample_faq_db import search_faq, get_all_faq_topics
 import uuid
 
-# Initialize BigQuery client
-bq_client = bigquery.Client()
+# Global clients - initialized lazily on first use
+_bq_client = None
+_fs_client = None
+_genai_client = None
+
+# ============================================================================
+# LAZY CLIENT INITIALIZATION (Render-friendly)
+# ============================================================================
+
+def get_bq_client():
+    """Lazy initialization of BigQuery client"""
+    global _bq_client
+    if _bq_client is None:
+        try:
+            _bq_client = bigquery.Client()
+        except Exception as e:
+            print(f"⚠️  BigQuery client not available: {e}")
+            return None
+    return _bq_client
+
+def get_fs_client():
+    """Lazy initialization of Firestore client"""
+    global _fs_client
+    if _fs_client is None:
+        try:
+            _fs_client = firestore.Client()
+        except Exception as e:
+            print(f"⚠️  Firestore client not available: {e}")
+            return None
+    return _fs_client
+
+def get_genai_client():
+    """Get Gemini client"""
+    global _genai_client
+    if _genai_client is None:
+        try:
+            api_key = os.getenv("GEMINI_API_KEY")
+            if api_key:
+                _genai_client = genai.Client(api_key=api_key)
+            else:
+                print("⚠️  GEMINI_API_KEY environment variable not set")
+                return None
+        except Exception as e:
+            print(f"⚠️  Gemini client initialization failed: {e}")
+            return None
+    return _genai_client
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+PROJECT_ID = os.getenv("GCP_PROJECT", "agent-health-monitor")
+BQ_DATASET = "agent_monitoring"
+BQ_TRACES_TABLE = "agent_traces"
+FIRESTORE_DATABASE = "(default)"
+
+# ============================================================================
+# AGENT TOOLS
+# ============================================================================
 
 def lookup_faq(user_query: str) -> dict:
     """
@@ -112,45 +170,54 @@ def log_agent_trace(
         "environment": "production",
     }
     
-    # Insert into BigQuery
-    table_id = f"{bq_client.project}.agent_monitoring.agent_traces"
-    
-    
-    # Create JSON lines format
-    json_data = json.dumps(trace_row) + '\n'
-    
-    # Use load_table_from_file for compatibility with free tier
-    # For now, just skip if we hit the free tier limitation
-    try:
-        errors = bq_client.insert_rows_json(table_id, [trace_row])
-    except Exception as e:
-        if "Streaming insert is not allowed" in str(e):
-            print(f"⚠️  Free tier: Skipping streaming insert, but trace is prepared: {trace_id}")
-            errors = []
-        else:
-            raise
-    
-    if errors:
-        print(f"❌ BigQuery error: {errors}")
+    # Try to insert into BigQuery
+    bq = get_bq_client()
+    if bq is None:
+        print(f"⚠️  BigQuery unavailable - trace prepared but not logged: {trace_id}")
         return {
-            "status": "error",
+            "status": "success_local",
             "trace_id": trace_id,
-            "error": str(errors)
+            "latency_ms": latency_ms,
+            "cost_usd": trace_row["total_cost_usd"],
+            "note": "BigQuery logging skipped (not available)"
         }
     
-    print(f"✅ Trace logged: {trace_id}")
+    try:
+        table_id = f"{PROJECT_ID}.{BQ_DATASET}.{BQ_TRACES_TABLE}"
+        errors = bq.insert_rows_json(table_id, [trace_row])
+        
+        if errors:
+            print(f"⚠️  BigQuery insert errors: {errors}")
+            return {
+                "status": "partial_success",
+                "trace_id": trace_id,
+                "latency_ms": latency_ms,
+                "cost_usd": trace_row["total_cost_usd"],
+                "error": str(errors)
+            }
+        
+        print(f"✅ Trace logged to BigQuery: {trace_id}")
+        return {
+            "status": "success",
+            "trace_id": trace_id,
+            "latency_ms": latency_ms,
+            "cost_usd": trace_row["total_cost_usd"]
+        }
     
-    return {
-        "status": "success",
-        "trace_id": trace_id,
-        "latency_ms": latency_ms,
-        "cost_usd": trace_row["total_cost_usd"]
-    }
+    except Exception as e:
+        print(f"⚠️  BigQuery logging failed (continuing anyway): {e}")
+        return {
+            "status": "success_local",
+            "trace_id": trace_id,
+            "latency_ms": latency_ms,
+            "cost_usd": trace_row["total_cost_usd"],
+            "note": f"BigQuery logging failed: {str(e)}"
+        }
 
 def generate_response_with_gemini(
     user_input: str,
     faq_context: dict,
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-2.0-flash"
 ) -> dict:
     """
     Tool: Use Gemini to synthesize human-like response from FAQ context
@@ -164,11 +231,13 @@ def generate_response_with_gemini(
         dict with generated response and metadata
     """
     
-    # from google.generativeai import GenerativeModel
-    from google import genai
-    import os
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-    # model = GenerativeModel(model_name)
+    client = get_genai_client()
+    if client is None:
+        return {
+            "status": "error",
+            "error": "Gemini API key not configured",
+            "response": "I apologize, but I'm unable to generate a response at this time. Please try again later or contact support."
+        }
     
     # Build prompt with FAQ context
     faq_text = ""
@@ -196,25 +265,32 @@ Instructions:
 
 Generate your response now:"""
 
-    response = client.models.generate_content(model=model_name,contents=prompt)
-    # response = model.generate_content(prompt)
-    generated_text = response.text
-    
-    # Extract token usage from response metadata
-    response_tokens = len(generated_text.split())  # Approximate
-    input_tokens = len(prompt.split())  # Approximate
-    
-    return {
-        "status": "success",
-        "response": generated_text,
-        "response_tokens": response_tokens,
-        "input_tokens": input_tokens,
-        "model": model_name,
-        "usage": {
+    try:
+        response = client.models.generate_content(model=model_name, contents=prompt)
+        generated_text = response.text
+        
+        # Extract token usage from response metadata
+        response_tokens = len(generated_text.split())  # Approximate
+        input_tokens = len(prompt.split())  # Approximate
+        
+        return {
+            "status": "success",
+            "response": generated_text,
+            "response_tokens": response_tokens,
             "input_tokens": input_tokens,
-            "output_tokens": response_tokens,
+            "model": model_name,
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": response_tokens,
+            }
         }
-    }
+    except Exception as e:
+        print(f"❌ Gemini API error: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "response": "I apologize, but I encountered an error while processing your request. Please try again."
+        }
 
 def assess_response_quality(
     user_input: str,
@@ -255,7 +331,10 @@ def assess_response_quality(
             faq_keywords.update(result["answer"].lower().split())
         
         response_keywords = set(agent_response.lower().split())
-        keyword_overlap = len(faq_keywords & response_keywords) / len(faq_keywords)
+        if faq_keywords:
+            keyword_overlap = len(faq_keywords & response_keywords) / len(faq_keywords)
+        else:
+            keyword_overlap = 1.0
         
         if keyword_overlap < 0.3:
             quality_score -= 1.0
@@ -272,7 +351,10 @@ def assess_response_quality(
     # Check 5: Is response coherent to the question?
     question_words = set(user_input.lower().split()[:5])
     response_words = set(agent_response.lower().split()[:20])
-    relevance = len(question_words & response_words) / len(question_words)
+    if question_words:
+        relevance = len(question_words & response_words) / len(question_words)
+    else:
+        relevance = 1.0
     
     if relevance < 0.2:
         quality_score -= 1.0
@@ -292,7 +374,10 @@ def assess_response_quality(
                      "Response quality is poor"
     }
 
-# Agent Tool Registry
+# ============================================================================
+# AGENT TOOL REGISTRY
+# ============================================================================
+
 AGENT_TOOLS = {
     "lookup_faq": lookup_faq,
     "generate_response": generate_response_with_gemini,
@@ -322,6 +407,10 @@ def execute_tool(tool_name: str, **kwargs) -> dict:
     except Exception as e:
         return {"error": str(e), "tool": tool_name}
 
+# ============================================================================
+# TESTING (if run directly)
+# ============================================================================
+
 if __name__ == "__main__":
     # Test the tools
     print("Testing Agent Tools...\n")
@@ -338,7 +427,10 @@ if __name__ == "__main__":
             "How much does CloudPulse cost?",
             faq_results
         )
-        print(f"   Generated response: {response_result['response'][:100]}...")
+        if response_result['status'] == 'success':
+            print(f"   Generated response: {response_result['response'][:100]}...")
+        else:
+            print(f"   Skipped (Gemini key not set): {response_result.get('error', 'Unknown error')}")
     except Exception as e:
         print(f"   Skipped (Gemini key not set): {e}")
     
